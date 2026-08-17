@@ -5933,8 +5933,29 @@ def universal_tool_specs() -> tuple[dict[str, Any], ...]:
                 type="number",
                 minimum=0,
             ),
+            "major_radius_mm": _property_schema(
+                "Torus or ellipse major radius in mm.",
+                type="number",
+                minimum=0,
+            ),
+            "minor_radius_mm": _property_schema(
+                "Torus or ellipse minor radius in mm.",
+                type="number",
+                minimum=0,
+            ),
+            "reference_radius_mm": _property_schema(
+                "Cone radius at its reported origin in mm.",
+                type="number",
+                minimum=0,
+            ),
+            "semi_angle_degrees": _property_schema(
+                "Signed cone semi-angle in degrees.",
+                type="number",
+                minimum=-90,
+                maximum=90,
+            ),
             "radius_tolerance_mm": _property_schema(
-                "Radius tolerance in mm.",
+                "Tolerance for any requested radius in mm.",
                 type="number",
                 minimum=0,
             ),
@@ -5968,7 +5989,7 @@ def universal_tool_specs() -> tuple[dict[str, Any], ...]:
                 minimum=0,
             ),
             "angle_tolerance_degrees": _property_schema(
-                "Direction tolerance in degrees.",
+                "Tolerance for a direction or semi-angle in degrees.",
                 type="number",
                 minimum=0,
                 maximum=180,
@@ -6097,9 +6118,10 @@ def universal_tool_specs() -> tuple[dict[str, Any], ...]:
         {
             "name": "vibescript.read_geometry",
             "description": (
-                "Inspect an exact native/imported B-rep. topology returns bounds, counts, "
-                "and query matches; full adds validity and mass properties. Matches include "
-                "copy-ready api.subshape selectors. Units are mm/degrees."
+                "Inspect exact B-rep geometry. topology returns bounds, counts, and query "
+                "matches; full adds validity and mass properties. Query matches include "
+                "copy-ready api.subshape selectors. Set include_subelements only for an "
+                "unfiltered face/edge list. Units are mm/degrees."
             ),
             "parameters": {
                 "type": "object",
@@ -6111,7 +6133,7 @@ def universal_tool_specs() -> tuple[dict[str, Any], ...]:
                         "enum": ["topology", "full"],
                     },
                     "include_subelements": _property_schema(
-                        "Include bounded 1-based face/edge facts.",
+                        "Unfiltered 1-based face/edge facts; omit when named queries suffice.",
                         type="boolean",
                     ),
                     "max_subelements": _property_schema(

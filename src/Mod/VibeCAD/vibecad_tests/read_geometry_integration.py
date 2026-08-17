@@ -84,6 +84,43 @@ def main() -> int:
         assert "valid" not in topology_facts
         assert "volume_mm3" not in topology_facts
 
+        imported.Shape = Part.makeTorus(12.0, 3.0)
+        document.recompute()
+        curved = complete_geometry_read(
+            capture_geometry_read(
+                service,
+                {
+                    "reference": reference,
+                    "analysis_level": "topology",
+                    "queries": [
+                        {
+                            "name": "torus",
+                            "element_type": "face",
+                            "geometry_type": "Torus",
+                            "major_radius_mm": 12.0,
+                            "minor_radius_mm": 3.0,
+                            "expected_count": 1,
+                        },
+                        {
+                            "name": "different_torus",
+                            "element_type": "face",
+                            "geometry_type": "Torus",
+                            "major_radius_mm": 13.0,
+                        },
+                    ],
+                },
+            )
+        )
+        curved_size = curved["geometry"]["bounds_mm"]["size"]
+        assert all(
+            abs(actual - expected) <= 1.0e-6
+            for actual, expected in zip(curved_size, [30.0, 30.0, 6.0])
+        ), curved_size
+        torus_queries = curved["geometry"]["query_results"]
+        assert torus_queries[0]["matched_count"] == 1, torus_queries
+        assert torus_queries[0]["cardinality_ok"] is True, torus_queries
+        assert torus_queries[1]["matched_count"] == 0, torus_queries
+
         imported.Shape = Part.makeBox(10.0, 20.0, 30.0)
         document.recompute()
         detailed = complete_geometry_read(

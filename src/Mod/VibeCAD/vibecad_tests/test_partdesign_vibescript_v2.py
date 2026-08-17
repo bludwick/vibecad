@@ -19,6 +19,7 @@ from vibescript_domain_api import DomainValue, create_domain_api
 from vibescript_partdesign_api import PartDesignDomainAPI
 from vibescript_partdesign_worker import _optimal_shape_bounds
 from vibescript_domain_worker import _execute_source
+from vibescript_part_worker import part_shape_facts
 
 
 PROGRAM_ID = "0123456789abcdef0123456789abcdef"
@@ -71,6 +72,69 @@ def test_measurement_bounds_prefer_exact_occ_geometry() -> None:
             return Bounds(10.0)
 
     assert _optimal_shape_bounds(Shape()).XLength == 10.0
+
+
+def test_published_shape_facts_use_exact_occ_bounds() -> None:
+    class Bounds:
+        XMin = -15.0
+        YMin = -15.0
+        ZMin = -3.0
+        XMax = 15.0
+        YMax = 15.0
+        ZMax = 3.0
+        XLength = 30.0
+        YLength = 30.0
+        ZLength = 6.0
+
+    class ApproximateBounds(Bounds):
+        XMin = -16.235883
+        YMin = -16.235883
+        ZMin = 0.0
+        XMax = 16.235883
+        YMax = 16.235883
+        ZMax = 0.0
+        XLength = 32.471766
+        YLength = 32.471766
+        ZLength = 0.0
+
+    class Shape:
+        ShapeType = "Solid"
+        BoundBox = ApproximateBounds()
+        CenterOfMass = None
+        Solids = [object()]
+        Shells = [object()]
+        Faces = [object()]
+        Wires = [object()]
+        Edges = [object()]
+        Vertexes = [object()]
+        Length = 0.0
+        Area = 1421.223
+        Volume = 2131.835
+
+        @staticmethod
+        def isNull() -> bool:
+            return False
+
+        @staticmethod
+        def isValid() -> bool:
+            return True
+
+        @staticmethod
+        def optimalBoundingBox(
+            use_triangulation: bool, use_shape_tolerance: bool
+        ) -> Bounds:
+            assert use_triangulation is False
+            assert use_shape_tolerance is False
+            return Bounds()
+
+    facts = part_shape_facts(Shape(), max_subelements=0)
+
+    assert facts["bounds_center_mm"] == [0.0, 0.0, 0.0]
+    assert facts["bounds_mm"] == {
+        "min": [-15.0, -15.0, -3.0],
+        "max": [15.0, 15.0, 3.0],
+        "size": [30.0, 30.0, 6.0],
+    }
 
 
 def test_failed_source_retains_bounded_print_output() -> None:

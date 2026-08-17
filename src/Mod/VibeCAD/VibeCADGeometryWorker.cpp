@@ -662,12 +662,11 @@ Json shapeFacts(const TopoDS_Shape& shape)
 Json boundsFacts(const TopoDS_Shape& shape)
 {
     Bnd_Box box;
-    // A conservative topology box is the useful contract here.  AddOptimal
-    // analytically re-solves every surface and can turn a bounds read on a
-    // large imported B-rep into a minute-long operation.  Add includes each
-    // subshape's modeling tolerance, so it remains a safe enclosing box for
-    // selector prefilters and placement decisions without that recomputation.
-    BRepBndLib::Add(shape, box, true);
+    // User-visible dimensions must describe the B-rep, not its cached mesh.
+    // Triangulation deflection can otherwise inflate curved shapes by several
+    // millimeters. Shape tolerances are also excluded because they are quality
+    // metadata rather than physical extents.
+    BRepBndLib::AddOptimal(shape, box, false, false);
     box.SetGap(0.0);
     Standard_Real xMin = 0.0;
     Standard_Real yMin = 0.0;
@@ -995,6 +994,24 @@ bool numericRangeMatches(
         && (!query.contains(maximumName) || value <= query.at(maximumName).get<double>());
 }
 
+bool numericToleranceMatches(
+    const Json& facts,
+    const Json& query,
+    const char* field,
+    const char* toleranceField,
+    double defaultTolerance
+)
+{
+    if (!query.contains(field)) {
+        return true;
+    }
+    if (!facts.contains(field) || !facts.at(field).is_number()) {
+        return false;
+    }
+    const double tolerance = query.value(toleranceField, defaultTolerance);
+    return std::abs(facts.at(field).get<double>() - query.at(field).get<double>()) <= tolerance;
+}
+
 bool geometryQueryMatches(const Json& facts, const Json& query)
 {
     if (query.contains("geometry_type")
@@ -1010,15 +1027,30 @@ bool geometryQueryMatches(const Json& facts, const Json& query)
             return false;
         }
     }
-    if (query.contains("radius_mm")) {
-        if (!facts.contains("radius_mm") || !facts.at("radius_mm").is_number()) {
+    for (const char* field : {
+             "radius_mm",
+             "major_radius_mm",
+             "minor_radius_mm",
+             "reference_radius_mm",
+         }) {
+        if (!numericToleranceMatches(
+                facts,
+                query,
+                field,
+                "radius_tolerance_mm",
+                1.0e-6
+            )) {
             return false;
         }
-        const double tolerance = query.value("radius_tolerance_mm", 1.0e-6);
-        if (std::abs(facts.at("radius_mm").get<double>() - query.at("radius_mm").get<double>())
-            > tolerance) {
-            return false;
-        }
+    }
+    if (!numericToleranceMatches(
+            facts,
+            query,
+            "semi_angle_degrees",
+            "angle_tolerance_degrees",
+            1.0
+        )) {
+        return false;
     }
     if (!numericRangeMatches(facts, query, "area_mm2", "min_area_mm2", "max_area_mm2")
         || !numericRangeMatches(facts, query, "length_mm", "min_length_mm", "max_length_mm")) {

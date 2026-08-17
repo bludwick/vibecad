@@ -324,6 +324,46 @@ def test_shared_vibescript_lifecycle_is_unambiguous_for_the_operating_model() ->
         }
 
 
+def test_read_geometry_queries_cover_returned_analytic_dimensions() -> None:
+    from VibeCADGeometryInspection import _normalize_geometry_queries
+
+    read_geometry = {
+        spec["name"]: spec for spec in domains.universal_tool_specs()
+    }["vibescript.read_geometry"]
+    properties = read_geometry["parameters"]["properties"]["queries"]["items"][
+        "properties"
+    ]
+    assert {
+        "major_radius_mm",
+        "minor_radius_mm",
+        "reference_radius_mm",
+        "semi_angle_degrees",
+    } <= set(properties)
+
+    normalized = _normalize_geometry_queries(
+        [
+            {
+                "name": "torus",
+                "element_type": "face",
+                "geometry_type": "Torus",
+                "major_radius_mm": 12.0,
+                "minor_radius_mm": 3.0,
+            },
+            {
+                "name": "cone",
+                "element_type": "face",
+                "geometry_type": "Cone",
+                "reference_radius_mm": 8.0,
+                "semi_angle_degrees": -18.5,
+            },
+        ]
+    )
+    assert normalized[0]["major_radius_mm"] == 12.0
+    assert normalized[0]["minor_radius_mm"] == 3.0
+    assert normalized[1]["reference_radius_mm"] == 8.0
+    assert normalized[1]["semi_angle_degrees"] == -18.5
+
+
 def test_read_geometry_analysis_is_process_isolated(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

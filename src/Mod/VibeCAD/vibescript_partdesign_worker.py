@@ -18,6 +18,7 @@ from vibescript_part_worker import (
     PartOperationError,
     build_part_shape,
     configure_part_references,
+    optimal_shape_bounds as _optimal_shape_bounds,
     part_shape_facts,
 )
 from vibescript_part_api import PartDomainAPI
@@ -454,20 +455,6 @@ def _shape_bounds_diagnostic(shape: Any) -> dict[str, list[float]] | None:
             float(bounds.ZLength),
         ],
     }
-
-
-def _optimal_shape_bounds(shape: Any) -> Any | None:
-    """Return OCC geometric bounds without tolerance or mesh inflation."""
-
-    optimal = getattr(shape, "optimalBoundingBox", None)
-    if callable(optimal):
-        try:
-            return optimal(False, False)
-        except (AttributeError, RuntimeError, TypeError):
-            # Older OCC/FreeCAD builds may expose the method with a different
-            # binding. Their native BoundBox remains the compatibility path.
-            pass
-    return getattr(shape, "BoundBox", None)
 
 
 def _profile_from_feature(feature: Any) -> Any | None:

@@ -43,6 +43,10 @@ _QUERY_FIELDS = frozenset(
         "direction",
         "axis_direction",
         "radius_mm",
+        "major_radius_mm",
+        "minor_radius_mm",
+        "reference_radius_mm",
+        "semi_angle_degrees",
         "radius_tolerance_mm",
         "min_area_mm2",
         "max_area_mm2",
@@ -158,6 +162,9 @@ def _normalize_geometry_queries(value: Any) -> list[dict[str, Any]]:
             )
         for field in (
             "radius_mm",
+            "major_radius_mm",
+            "minor_radius_mm",
+            "reference_radius_mm",
             "radius_tolerance_mm",
             "min_area_mm2",
             "max_area_mm2",
@@ -168,6 +175,18 @@ def _normalize_geometry_queries(value: Any) -> list[dict[str, Any]]:
         ):
             if field in raw:
                 query[field] = _query_number(name, field, raw[field])
+        if "semi_angle_degrees" in raw:
+            query["semi_angle_degrees"] = _query_number(
+                name,
+                "semi_angle_degrees",
+                raw["semi_angle_degrees"],
+                minimum=-90.0,
+            )
+            if query["semi_angle_degrees"] > 90.0:
+                raise GeometryInspectionError(
+                    "GEOMETRY_QUERY_INVALID",
+                    f"Geometry query {name!r} semi_angle_degrees must not exceed 90.",
+                )
         if query.get("angle_tolerance_degrees", 1.0) > 180.0:
             raise GeometryInspectionError(
                 "GEOMETRY_QUERY_INVALID",

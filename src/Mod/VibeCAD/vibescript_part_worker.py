@@ -181,8 +181,24 @@ def _point_fact(value: Any) -> list[float]:
     return [float(value.x), float(value.y), float(value.z)]
 
 
-def _bounds_fact(shape: Any) -> dict[str, list[float]]:
-    bounds = shape.BoundBox
+def optimal_shape_bounds(shape: Any) -> Any | None:
+    """Return OCC geometric bounds without tolerance or mesh inflation."""
+
+    optimal = getattr(shape, "optimalBoundingBox", None)
+    if callable(optimal):
+        try:
+            return optimal(False, False)
+        except (AttributeError, RuntimeError, TypeError):
+            # Preserve compatibility with bindings that do not accept both
+            # flags while preferring exact bounds on current VibeCAD builds.
+            pass
+    return getattr(shape, "BoundBox", None)
+
+
+def _bounds_fact(shape: Any, *, bounds: Any | None = None) -> dict[str, list[float]]:
+    bounds = optimal_shape_bounds(shape) if bounds is None else bounds
+    if bounds is None:
+        raise ValueError("A Part shape has no geometric bounds.")
     return {
         "min": [float(bounds.XMin), float(bounds.YMin), float(bounds.ZMin)],
         "max": [float(bounds.XMax), float(bounds.YMax), float(bounds.ZMax)],
@@ -261,7 +277,9 @@ def part_shape_facts(
     """
 
     detail_limit = max(0, min(int(max_subelements), MAX_SUBELEMENT_FACTS))
-    bounds = shape.BoundBox
+    bounds = optimal_shape_bounds(shape)
+    if bounds is None:
+        raise ValueError("A Part shape has no geometric bounds.")
     center = getattr(shape, "CenterOfMass", None)
     faces = list(getattr(shape, "Faces", []) or [])
     edges = list(getattr(shape, "Edges", []) or [])
@@ -284,7 +302,7 @@ def part_shape_facts(
             float((bounds.YMin + bounds.YMax) / 2.0),
             float((bounds.ZMin + bounds.ZMax) / 2.0),
         ],
-        "bounds_mm": _bounds_fact(shape),
+        "bounds_mm": _bounds_fact(shape, bounds=bounds),
         "face_details": [
             _face_fact(index, face)
             for index, face in enumerate(faces[:detail_limit], start=1)
@@ -328,7 +346,9 @@ def part_shape_reference_facts(
         "edges": count("Edge", "Edges"),
         "vertices": count("Vertex", "Vertexes"),
     }
-    bounds = shape.BoundBox
+    bounds = optimal_shape_bounds(shape)
+    if bounds is None:
+        raise ValueError("A Part shape has no geometric bounds.")
     return {
         "shape_type": str(getattr(shape, "ShapeType", "") or ""),
         "valid": True if assume_valid else bool(shape.isValid()),
@@ -339,7 +359,7 @@ def part_shape_reference_facts(
             float((bounds.YMin + bounds.YMax) / 2.0),
             float((bounds.ZMin + bounds.ZMax) / 2.0),
         ],
-        "bounds_mm": _bounds_fact(shape),
+        "bounds_mm": _bounds_fact(shape, bounds=bounds),
         "subelement_detail_limit": 0,
         "subelement_details_truncated": bool(
             element_counts["faces"] or element_counts["edges"]
