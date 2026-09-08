@@ -70,6 +70,7 @@
 #include <Gui/Document.h>
 #include <Gui/MainWindow.h>
 #include <Gui/ViewParams.h>
+#include <Gui/ViewProvider.h>
 #include <Gui/ViewProviderPlane.h>
 #include <Gui/Selection/SelectionFilter.h>
 
@@ -745,6 +746,77 @@ private:
     std::vector<PartDesignGui::TaskFeaturePick::featureStatus> status;
 };
 
+struct PlaneVisibilityState
+{
+    ObjectIdentity identity;
+    bool wasVisible {false};
+};
+
+std::vector<PlaneVisibilityState> collectAndShowDatumPlanes(
+    App::Document* appdocument,
+    PartDesign::Body* activeBody
+)
+{
+    std::vector<PlaneVisibilityState> shown;
+    if (!appdocument || !activeBody) {
+        return shown;
+    }
+
+    PlaneFinder planeFinder {appdocument, activeBody};
+    planeFinder.findDatumPlanes();
+    const std::vector<App::DocumentObject*> planes = planeFinder.getPlanes();
+    const std::vector<PartDesignGui::TaskFeaturePick::featureStatus> status
+        = planeFinder.getStatus();
+    if (planes.size() != status.size()) {
+        return shown;
+    }
+
+    for (std::size_t index = 0; index < planes.size(); ++index) {
+        auto* plane = planes[index];
+        if (!plane) {
+            continue;
+        }
+        if (auto* datum = dynamic_cast<App::DatumElement*>(plane);
+            datum && datum->isOriginFeature()) {
+            continue;
+        }
+        if (status[index] != PartDesignGui::TaskFeaturePick::validFeature
+            && status[index] != PartDesignGui::TaskFeaturePick::basePlane) {
+            continue;
+        }
+
+        auto* viewProvider = Gui::Application::Instance->getViewProvider(plane);
+        if (!viewProvider) {
+            continue;
+        }
+
+        shown.push_back({identityOf(plane), viewProvider->isVisible()});
+        viewProvider->setVisible(true);
+        if (auto* planeViewProvider
+            = dynamic_cast<Gui::ViewProviderPlane*>(viewProvider)) {
+            planeViewProvider->setLabelVisibility(true);
+        }
+    }
+
+    return shown;
+}
+
+void restoreDatumPlaneVisibility(const std::vector<PlaneVisibilityState>& shown)
+{
+    for (const auto& state : shown) {
+        auto* plane = resolveObject(state.identity);
+        auto* viewProvider = Gui::Application::Instance->getViewProvider(plane);
+        if (!viewProvider) {
+            continue;
+        }
+        if (auto* planeViewProvider
+            = dynamic_cast<Gui::ViewProviderPlane*>(viewProvider)) {
+            planeViewProvider->setLabelVisibility(false);
+        }
+        viewProvider->setVisible(state.wasVisible);
+    }
+}
+
 class SketchRequestSelection
 {
 public:
@@ -829,6 +901,8 @@ private:
     void createSketchAndShowAttachment()
     {
         setOriginTemporaryVisibility();
+        const std::vector<PlaneVisibilityState> datumPlaneState
+            = collectAndShowDatumPlanes(activeBody->getDocument(), activeBody);
 
         // Capture selection before clearing it to pre-populate the attachment dialog.
         // This mirrors UnifiedDatumCommand: use attacher to find the best fit mode.
@@ -848,6 +922,8 @@ private:
         std::string FeatName = doc->getUniqueObjectName("Sketch");
         auto* sketch = createSketchExact(activeBody, FeatName);
         if (!sketch) {
+            resetOriginVisibility(activeBody);
+            restoreDatumPlaneVisibility(datumPlaneState);
             throw RejectException();
         }
 
@@ -869,12 +945,13 @@ private:
 
         const ObjectIdentity bodyIdentity = identityOf(activeBody);
         const ObjectIdentity sketchIdentity = identityOf(sketch);
-        auto onAccept = [bodyIdentity, sketchIdentity]() {
+        auto onAccept = [bodyIdentity, sketchIdentity, datumPlaneState]() {
             auto* partDesignBody = freecad_cast<PartDesign::Body*>(
                 resolveObject(bodyIdentity)
             );
             auto* currentSketch = resolveObject(sketchIdentity);
             resetOriginVisibility(partDesignBody);
+            restoreDatumPlaneVisibility(datumPlaneState);
             if (!partDesignBody || !currentSketch
                 || currentSketch->getDocument()
                     != partDesignBody->getDocument()) {
@@ -885,11 +962,12 @@ private:
             );
             PartDesignGui::setEdit(currentSketch, partDesignBody);
         };
-        auto onReject = [bodyIdentity]() {
+        auto onReject = [bodyIdentity, datumPlaneState]() {
             auto* partDesignBody = freecad_cast<PartDesign::Body*>(
                 resolveObject(bodyIdentity)
             );
             resetOriginVisibility(partDesignBody);
+            restoreDatumPlaneVisibility(datumPlaneState);
         };
 
         Gui::Selection().clearSelection(doc->getName());
@@ -900,6 +978,7 @@ private:
         );
         if (!vps) {
             resetOriginVisibility(activeBody);
+            restoreDatumPlaneVisibility(datumPlaneState);
             throw RejectException();
         }
         vps->showAttachmentEditor(onAccept, onReject);

@@ -2415,6 +2415,48 @@ class TestNativeRibbonTools(unittest.TestCase):
         finally:
             preferences.SetBool("NewSketchUseAttachmentDialog", previous)
 
+    def test_new_sketch_displays_available_datum_planes(self):
+        """Starting a sketch shows origin and user datum planes for picking."""
+
+        body, _source = self._new_body("DatumSketchBody", solid=True)
+        Gui.activeView().setActiveObject("pdbody", body)
+        Gui.Selection.clearSelection()
+
+        legacy = body.newObject("PartDesign::Plane", "LegacyDatumPlane")
+        modern = body.newObject("Part::DatumPlane", "CoreDatumPlane")
+        visible = body.newObject("PartDesign::Plane", "VisibleDatumPlane")
+        self.document.recompute()
+
+        origin = body.Origin
+        origin.ViewObject.Visibility = False
+        legacy.ViewObject.Visibility = False
+        modern.ViewObject.Visibility = False
+        visible.ViewObject.Visibility = True
+        self._process_events()
+
+        self.assertFalse(origin.ViewObject.isVisible())
+        self.assertFalse(legacy.ViewObject.isVisible())
+        self.assertFalse(modern.ViewObject.isVisible())
+        self.assertTrue(visible.ViewObject.isVisible())
+
+        Gui.runCommand("PartDesign_CompSketches", 0)
+        self._process_events(50)
+        self.assertTrue(Gui.Control.activeDialog())
+
+        self.assertTrue(origin.ViewObject.isVisible(), origin.Name)
+        self.assertTrue(legacy.ViewObject.isVisible(), legacy.Name)
+        self.assertTrue(modern.ViewObject.isVisible(), modern.Name)
+        self.assertTrue(visible.ViewObject.isVisible(), visible.Name)
+        for plane in origin.OriginFeatures:
+            if plane.isDerivedFrom("App::Plane"):
+                self.assertTrue(plane.ViewObject.isVisible(), plane.Name)
+
+        self._cancel_task("PartDesign_NewSketch")
+        self.assertFalse(origin.ViewObject.isVisible())
+        self.assertFalse(legacy.ViewObject.isVisible())
+        self.assertFalse(modern.ViewObject.isVisible())
+        self.assertTrue(visible.ViewObject.isVisible())
+
     def test_shipped_new_sketch_is_one_global_reusable_history_definition(self):
         body, source = self._new_body(
             "GlobalSketchSupportBody",

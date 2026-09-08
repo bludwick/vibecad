@@ -92,6 +92,26 @@ def test_linked_body_placement_joins_the_new_sketch_transaction():
     assert source.count("applyLinkedBodyPlacement(") == 3
 
 
+def test_new_sketch_shows_available_datum_planes():
+    source = _source("src/Mod/PartDesign/Gui/SketchWorkflow.cpp")
+    attachment = _scope(
+        source,
+        "void createSketchAndShowAttachment()",
+        "static void resetOriginVisibility",
+    )
+
+    assert "setOriginTemporaryVisibility();" in attachment
+    assert "collectAndShowDatumPlanes(" in attachment
+    assert "restoreDatumPlaneVisibility(" in attachment
+    assert "planeFinder.findDatumPlanes();" in source
+    assert attachment.index("setOriginTemporaryVisibility();") < attachment.index(
+        "collectAndShowDatumPlanes("
+    )
+    assert attachment.index("collectAndShowDatumPlanes(") < attachment.index(
+        "showAttachmentEditor("
+    )
+
+
 def test_multi_transform_children_use_the_exact_body_factory_return():
     source = _source(
         "src/Mod/PartDesign/Gui/TaskMultiTransformParameters.cpp"
